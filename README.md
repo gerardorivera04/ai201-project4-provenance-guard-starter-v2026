@@ -39,6 +39,29 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+1. **The caller sends JSON to `POST /submit`.** The request contains the
+   submitted `text` and the `creator_id`; Flask receives the HTTP request.
+2. **The route validates the request.** It checks that `text` is present and
+   non-empty, keeps the creator identity, and creates a unique `content_id`
+   for this submission.
+3. **The model signal reads the text.** `detector.model_signal` runs the local
+   language model, measures perplexity (predictability), and returns a
+   0-to-1 AI-likelihood score.
+4. **The style signal measures the text's shape.** `stylometry.style_signal`
+   calculates sentence-length variation, vocabulary repetition, and
+   punctuation density, then turns them into a second 0-to-1 AI-likelihood
+   score without interpreting the topic.
+5. **The scoring step combines the two scores.**
+   `scoring.combine_signals` applies the documented weights; the result is one
+   0-to-1 combined score where higher means more AI-like.
+6. **The label step maps the score to a reader-facing result.**
+   `scoring.score_to_label` produces a machine-readable guess (`human`,
+   `unsure`, or `ai`) and a plain-English label using the human and AI
+   thresholds.
+7. **The service records and returns the decision.** `audit.log_decision`
+   stores the content ID, creator, both signal scores, combined score, guess,
+   label, and status. The JSON response gives the caller the same result so a
+   reader can see the label and the writer can appeal by content ID.
 
 
 ---
@@ -53,36 +76,134 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** How predictable the submitted text is to the local
+language model, using perplexity. Low perplexity becomes a higher AI-likelihood
+score because generated text often follows likely next-word patterns.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** A model generates by
+choosing likely continuations, so AI text can be smooth, ordinary, and easy for
+another language model to predict. Human writing often includes personal,
+unexpected wording or abrupt turns, which can raise perplexity.
 
-**What it can't see:**
+**What it can't see:** It cannot see authorship or intent. Plain writing by a
+real person, including a second-language writer's careful vocabulary, may be
+just as predictable as AI writing and create a false positive. It also cannot
+recognize that a human edited, paraphrased, or copied AI text.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The text's surface shape: how much sentence lengths vary,
+how often words repeat (type-token ratio), and how dense or varied its
+punctuation is. These measures are normalized and combined into a 0-to-1 score
+where higher means more AI-like.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** AI-generated prose
+often settles into evenly sized sentences, repeated high-probability
+vocabulary, and predictable punctuation. Human drafts tend to be lumpier,
+with larger sentence-length changes, more individual word choices, and less
+uniform punctuation.
 
-**What it can't see:**
+**What it can't see:** It cannot read or understand meaning, facts, context,
+or who wrote the text. A person can imitate an AI-like rhythm, and an AI text
+can be made to look human by adding typos, splitting sentences, changing
+punctuation, or inserting a quotation. Text length also affects vocabulary
+ratios, so this signal cannot reliably compare pieces of very different
+lengths without normalization.
 
 ### The combining rule
 
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**The rule:** I use a weighted average of the model and style scores. When the
+signals disagree, I treat the disagreement as uncertainty rather than letting
+one signal alone make a high-confidence accusation.
 
-**The numbers:**
+**The numbers:** `0.50 * model_score + 0.50 * style_score`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
 <!-- ⚠️ The grader checks your code against that line. If your rule lives
      somewhere else, say where. -->
 
-**A case where my two signals split, and what my rule does with it:**
+**A case where my two signals split, and what my rule does with it:** A
+plainly written human paragraph could receive `model_score = 0.80` because it
+is highly predictable, while its varied sentence lengths and punctuation could
+receive `style_score = 0.20`. The combined score is `0.50`, so the service
+returns `unsure` instead of calling the writer's work AI with high confidence.
 
+---
+
+## False-Positive Trace
+
+A real writer submits a clear, ordinary paragraph that they wrote themselves.
+The model finds it very predictable and returns `model_score = 0.80`; the style
+signal sees enough regularity to return `style_score = 0.64`. The combining rule
+produces `0.72`, above the `0.65` AI threshold, so the reader sees the
+high-confidence AI label even though the writer is human. That is the harmful
+false positive this design is meant to limit. The writer can submit
+`POST /appeal` with the returned `content_id` and a short explanation. The
+service keeps the original decision, appends the appeal to the audit log, and
+changes the item's status to `under_review`; it does not silently erase the
+original result. A reviewer can then reconsider it. The wide unsure band and
+the appeal path are the safeguards: they trade some missed AI text for fewer
+wrong accusations.
+
+---
+
+## Endpoint Contracts
+
+These are the contracts the route, signals, scoring, audit log, and client all
+need to keep consistent.
+
+### `POST /submit`
+
+**Request JSON**
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `text` | string | yes | The writing to assess; it must not be empty or whitespace-only. |
+| `creator_id` | string | yes | Stable identifier for the person submitting the writing. |
+
+**Successful response JSON**
+
+| Field | Type | Meaning |
+|---|---|---|
+| `content_id` | string | Unique ID used to find this submission and appeal it. |
+| `creator_id` | string | The submitting creator ID. |
+| `guess` | string | Exactly `human`, `unsure`, or `ai`. |
+| `confidence` | number | `abs(combined_score - 0.50) * 2`, rounded to four decimals; 0 means the signals are exactly uncertain and 1 means maximum distance from the midpoint. |
+| `label` | string | The exact plain-English message shown to the reader. |
+| `model_score` | number | Detector signal, 0 to 1; higher means more AI-like. |
+| `style_score` | number | Stylometry signal, 0 to 1; higher means more AI-like. |
+| `combined_score` | number | Weighted result used for the label, 0 to 1. |
+| `status` | string | Initially `decided`. |
+
+**Error response:** Invalid or missing JSON, missing `text`, or blank `text`
+returns HTTP `400` with `error` and `message` strings. A rate-limited request
+returns HTTP `429` with `error`, `message`, and `limit`.
+
+### `POST /appeal`
+
+**Request JSON**
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `content_id` | string | yes | ID returned by `/submit`. |
+| `reasoning` | string | yes | The writer's explanation of why the decision should be reviewed. |
+
+**Successful response JSON**
+
+| Field | Type | Meaning |
+|---|---|---|
+| `content_id` | string | The appealed submission ID. |
+| `status` | string | `under_review`, showing that the appeal was recorded. |
+| `message` | string | Plain-English confirmation that the appeal was received. |
+
+The endpoint verifies that `content_id` exists before recording the appeal.
+Missing or blank fields return HTTP `400`; an unknown `content_id` returns HTTP
+`404`. Every accepted appeal appends an audit entry and leaves the original
+decision intact.
 
 
 ---
