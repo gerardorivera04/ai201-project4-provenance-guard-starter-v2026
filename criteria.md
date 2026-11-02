@@ -44,11 +44,13 @@ Two things worth knowing before you pick numbers:
 ---
 ## 1.
 
-<!-- Your criterion. It must name a number. -->
+Of 10 pieces written by a real person, no more than 1 is labeled
+high-confidence AI in each of the three evaluation trials.
 
 
-
-**Why this target:**
+**Why this target:** A wrong AI accusation can unfairly harm a writer, so I
+allow at most one false positive out of ten while accepting that some AI text
+may be missed.
 
 
 
@@ -56,11 +58,15 @@ Two things worth knowing before you pick numbers:
 
 ## 2.
 
-<!-- Your criterion. -->
+For a test set of 5 clearly human pieces and 5 clearly AI-generated pieces,
+at least 4 of the human pieces must have a combined score below `0.35`, and at
+least 4 of the AI pieces must have a combined score above `0.65`, in every
+evaluation trial.
 
 
-
-**Why this target:**
+**Why this target:** The two signal groups should be separated enough for the
+labels to be useful, while allowing one difficult example on either side
+without claiming that the detector is perfect.
 
 
 
@@ -68,11 +74,13 @@ Two things worth knowing before you pick numbers:
 
 ## 3.
 
-<!-- Your criterion. -->
+All three reader-facing labels must be reachable: scores `0.20`, `0.50`, and
+`0.80` must produce, respectively, `human`, `unsure`, and `ai`, and a
+15-submission sample must contain at least one of each label.
 
 
-
-**Why this target:**
+**Why this target:** A label that cannot be produced is misleading to users and
+means the thresholds or upstream signals are not working as designed.
 
 
 
@@ -80,11 +88,14 @@ Two things worth knowing before you pick numbers:
 
 ## 4.
 
-<!-- Your criterion. -->
+For 5 valid submissions, 5 valid appeals must each return HTTP `200` with
+status `under_review`, and each appeal must append exactly one audit entry
+linked to the submitted `content_id` while preserving the original decision.
 
 
-
-**Why this target:**
+**Why this target:** Every writer who appeals needs a visible, traceable status
+change; preserving the original decision also makes the review history
+auditable instead of silently rewriting it.
 
 
 
@@ -92,11 +103,15 @@ Two things worth knowing before you pick numbers:
 
 ## 5.
 
-<!-- Your criterion. -->
+Each of these invalid requests must return HTTP `400` and a JSON body
+containing both `error` and `message`: missing `text`, empty `text`,
+whitespace-only `text`, and `text` longer than 10,000 characters. No invalid
+request may create an audit decision.
 
 
-
-**Why this target:**
+**Why this target:** Rejecting malformed or unreasonably large input explicitly
+protects the service from ambiguous results and unnecessary model work, while
+the JSON error gives callers something they can handle.
 
 
 
