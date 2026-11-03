@@ -155,7 +155,7 @@ def health():
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
-    ← TODO — Milestones 3, 4 and 5
+    The scoring pipeline is implemented; the appeal route remains for Milestone 5.
 
     Expects JSON:
         {"text": "...", "creator_id": "..."}
@@ -206,29 +206,37 @@ def submit():
     if not isinstance(text, str) or not text.strip():
         return jsonify({"error": "bad request", "message": "Send JSON with a non-empty \"text\"."}), 400
 
-    # Run the first signal only. The detector is tested independently before
-    # it is called from this route.
     import detector
+    import scoring
+    import stylometry
 
     model_score = detector.model_signal(text)
+    style_score = stylometry.style_signal(text)
+    combined_score = scoring.combine_signals(model_score, style_score)
+    guess, label = scoring.score_to_label(combined_score)
+    confidence = round(abs(combined_score - 0.5) * 2, 4)
     content_id = f"c_{uuid.uuid4().hex[:12]}"
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
-        guess="unsure",
+        guess=guess,
         model_score=model_score,
-        style_score=None,
+        style_score=style_score,
+        combined_score=combined_score,
+        label=label,
         status="decided",
     )
 
     return jsonify({
         "content_id": content_id,
         "creator_id": creator_id,
-        "guess": "unsure",
-        "confidence": 0.0,
-        "label": "not built yet",
+        "guess": guess,
+        "confidence": confidence,
+        "label": label,
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
+        "combined_score": combined_score,
+        "status": "decided",
     })
 
 
