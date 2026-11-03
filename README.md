@@ -243,13 +243,26 @@ decision intact.
      diagnostics. -->
 
 ```bash
+## Sample Run
+
+**A submission**
+
+```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text": "The project has a clear sequence of practical steps.", "creator_id": "writer-1"}'
 ```
 
-```json
-
+```json (result)
+{
+  "confidence": 0.0,
+  "content_id": "c_9c68fe5d2d7b",
+  "creator_id": "writer-1",
+  "guess": "unsure",
+  "label": "not built yet",
+  "model_score": 0.1718,
+  "style_score": null
+}
 ```
 
 **An appeal**
@@ -270,8 +283,23 @@ $ curl -X POST http://127.0.0.1:5000/appeal \
 $ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
-```json
-
+```json (result)
+{
+  "count": 1,
+  "entries": [
+    {
+      "combined_score": null,
+      "content_id": "c_9c68fe5d2d7b",
+      "creator_id": "writer-1",
+      "guess": "unsure",
+      "label": null,
+      "model_score": 0.1718,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-02T23:15:10+00:00"
+    }
+  ]
+}
 ```
 
 ---
