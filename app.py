@@ -243,7 +243,7 @@ def submit():
 @app.post("/appeal")
 def appeal():
     """
-    A writer says you got it wrong. ← TODO — Milestone 5
+    A writer says you got it wrong.
 
     Expects JSON:
         {"content_id": "...", "reasoning": "..."}
@@ -261,13 +261,39 @@ def appeal():
     wrong accusation and nothing at all.
     """
     payload = request.get_json(silent=True) or {}
+    content_id = payload.get("content_id")
+    reasoning = payload.get("reasoning")
 
-    # TODO: delete this and build the route.
+    if (
+        not isinstance(content_id, str)
+        or not content_id.strip()
+        or not isinstance(reasoning, str)
+        or not reasoning.strip()
+    ):
+        return jsonify({
+            "error": "bad request",
+            "message": "Send JSON with a content_id and non-empty reasoning.",
+        }), 400
+
+    entries = audit.entries_for(content_id)
+    if not entries:
+        return jsonify({
+            "error": "not found",
+            "message": f"No submission exists for content_id '{content_id}'.",
+        }), 404
+
+    original = entries[0]
+    audit.log_appeal(
+        content_id=content_id,
+        creator_id=original.get("creator_id", "unknown"),
+        reasoning=reasoning.strip(),
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": "under_review",
+        "message": "Your appeal was received and the submission is under review.",
+    })
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
