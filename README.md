@@ -399,15 +399,15 @@ $ curl -s "http://127.0.0.1:5000/log?limit=3"
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked Claude's AI chat assistant on how I can combine the model and style signals, and convert the combined score into readable labels.   
+- *What came back:* The AI tool made the suggestion to use a weighted average that used a calculation formula of taking the halves of both the model and signal scores, and sum those two values together. Additionally, there was a suggestion of implementating thresholds for my three label variants, which was 0.35 for human, 0.65 for AI, and an unsure label with a range between them. 
+- *What I changed:* I implemented the combining rule in the scoring.py file and the three label outcomes in the same file with their respective functions, such as combine_signals and score_to_label. 
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked my AI tool to review the submission route for missing, empty, or confusing input and to explain what information should be recorded in the audit log. 
+- *What came back:* The AI tool recommended validating 'text' as a non-empty string, preserving 'creator_id', generating a unique 'content_id', recording both signal scores and the final decision, and returning a clear error for invalid inputs.   
+- *What I changed:* I added the validation and connected the route to the following components: detector, stylometry, signal, and scoring functions, audit logs, and JSON responses.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
