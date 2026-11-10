@@ -415,7 +415,7 @@ $ curl -s "http://127.0.0.1:5000/log?limit=3"
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day
 
 **Why those numbers and not others:**
 <!-- Think about two people: a real writer submitting their own work a few
@@ -423,16 +423,23 @@ $ curl -s "http://127.0.0.1:5000/log?limit=3"
      thresholds. Your numbers have to be liveable for the first and hostile to
      the second. -->
 
+Five submissions per minute gives a real writer enough leverage to submit drafts
+or corrections without feeling blocked. Then, a daily limit of 50 allows legitimate
+work across a day while making it difficult for a script to send hundreds or
+thousands of variations to map the detector's thresholds.
+
 **What a caller counts as:** <!-- per address, or per creator_id? They fail
 differently — one script can look like a thousand callers, and one household
 can look like one. -->
+
+Requests are counted per `creator_id`. For example, if no valid creator ID is provided, the service falls back to the caller's remote address.
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
 ```
-
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
 ```
 
 ---
