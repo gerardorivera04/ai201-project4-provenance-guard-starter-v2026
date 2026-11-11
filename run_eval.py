@@ -16,9 +16,10 @@ about label coverage needs inputs across the score range.
 !! Three trials, and **your first signal runs a model, so identical input can
 score differently twice.** That's exactly why repeats matter here.
 
-This does the sending and the recording. It does not decide whether a trial
-passed — that depends on the criterion you wrote, so the Verdict column comes
-back blank.
+This does the sending and the recording. Criterion 4 also exercises the
+submit-then-appeal workflow and records the audit-log checks. It does not
+decide whether a trial passed — that depends on the criterion you wrote, so
+the Verdict column comes back blank.
 """
 
 import argparse
@@ -64,6 +65,19 @@ def describe(body):
         text = body["text"]
         return text[:70] if text else "(empty text)"
     return json.dumps(body)[:120]
+
+
+def log_entries_for(url, content_id, requests, timeout):
+    """Return audit entries for one content ID."""
+    response = requests.get(
+        f"{url}/log", params={"limit": 10000}, timeout=timeout
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return [
+        entry for entry in payload.get("entries", [])
+        if entry.get("content_id") == content_id
+    ]
 
 
 def main():
@@ -119,22 +133,93 @@ def main():
                     response = requests.post(f"{args.url}/submit", json=body,
                                              timeout=args.timeout)
                     payload = response.json() if response.content else {}
-                    results.append({
+                    result = {
                         "status": response.status_code,
+                        "content_id": payload.get("content_id"),
                         "guess": payload.get("guess"),
                         "confidence": payload.get("confidence"),
                         "model_score": payload.get("model_score"),
                         "style_score": payload.get("style_score"),
                         "label": payload.get("label"),
                         "sent": preview,
-                    })
+                    }
+
+                    if scenario.get("criterion") == 4 and response.status_code == 200:
+                        content_id = payload.get("content_id")
+                        appeal_result = {
+                            "appeal_http_status": None,
+                            "appeal_status": None,
+                            "appeal_audit_entries": None,
+                            "original_decision_preserved": False,
+                            "appeal_pass": False,
+                        }
+                        try:
+                            before_entries = log_entries_for(
+                                args.url, content_id, requests, args.timeout
+                            )
+                            appeal_response = requests.post(
+                                f"{args.url}/appeal",
+                                json={
+                                    "content_id": content_id,
+                                    "reasoning": (
+                                        "I wrote this submission myself and request "
+                                        "a review of the original decision."
+                                    ),
+                                },
+                                timeout=args.timeout,
+                            )
+                            appeal_payload = (
+                                appeal_response.json()
+                                if appeal_response.content
+                                else {}
+                            )
+                            after_entries = log_entries_for(
+                                args.url, content_id, requests, args.timeout
+                            )
+                            appeal_entries = [
+                                entry for entry in after_entries
+                                if entry.get("event") == "appeal"
+                            ]
+                            original_entries = [
+                                entry for entry in after_entries
+                                if entry.get("event") != "appeal"
+                            ]
+                            original_decision_preserved = (
+                                len(original_entries) == len(before_entries)
+                                and bool(original_entries)
+                                and original_entries[0].get("status") == "decided"
+                                and original_entries[0].get("guess") == payload.get("guess")
+                            )
+                            appeal_result.update({
+                                "appeal_http_status": appeal_response.status_code,
+                                "appeal_status": appeal_payload.get("status"),
+                                "appeal_audit_entries": len(appeal_entries),
+                                "original_decision_preserved": original_decision_preserved,
+                                "appeal_pass": (
+                                    appeal_response.status_code == 200
+                                    and appeal_payload.get("status") == "under_review"
+                                    and len(appeal_entries) == 1
+                                    and original_decision_preserved
+                                ),
+                            })
+                        except Exception as exc:  # noqa: BLE001
+                            appeal_result["appeal_error"] = (
+                                f"{type(exc).__name__}: {exc}"
+                            )
+                        result.update(appeal_result)
+
+                    results.append(result)
                 except Exception as exc:  # noqa: BLE001
                     results.append({"status": None, "error": f"{type(exc).__name__}: {exc}",
                                     "sent": preview})
 
             trials.append(results)
-            guesses = [r.get("guess") or "—" for r in results]
-            print(f"  trial {trial}: {', '.join(guesses)}")
+            if scenario.get("criterion") == 4:
+                appeals = [r.get("appeal_pass", False) for r in results]
+                print(f"  trial {trial}: {sum(appeals)}/{len(results)} appeals passed")
+            else:
+                guesses = [r.get("guess") or "—" for r in results]
+                print(f"  trial {trial}: {', '.join(guesses)}")
 
         rows.append({"scenario": scenario, "trials": trials})
 
@@ -155,7 +240,7 @@ def write_report(rows, args):
         f"# Run log{f' — {args.label}' if args.label else ''}",
         "",
         "- Produced by: `run_eval.py::main`",
-        "- Service: `app.py::submit` · scoring: `scoring.py::combine_signals`",
+        "- Service: `app.py::submit` and `app.py::appeal` · scoring: `scoring.py::combine_signals`",
         f"- {n} trials per criterion · {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
         "Fill in Target from `criteria.md`, and Run and Verdict from the output",
