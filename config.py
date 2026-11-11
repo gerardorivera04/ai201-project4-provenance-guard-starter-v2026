@@ -50,12 +50,11 @@ DETECTOR_MAX_TOKENS = 400
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.
 #
-# ⚠️ These are placeholders. Milestone 4 asks you to write your combining rule
-# down BEFORE you code it, and to put the numbers in your README. Whatever you
-# decide, it goes here.
+# The model signal was more useful than the surface-style signal in the
+# diagnosis, so the first measured improvement gives it more influence.
 
-WEIGHT_MODEL_SIGNAL = 0.5
-WEIGHT_STYLE_SIGNAL = 0.5
+WEIGHT_MODEL_SIGNAL = 0.7
+WEIGHT_STYLE_SIGNAL = 0.3
 
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
@@ -73,6 +72,10 @@ WEIGHT_STYLE_SIGNAL = 0.5
 
 HUMAN_THRESHOLD = 0.35
 AI_THRESHOLD = 0.65
+
+# Reject inputs that the detector is not designed to score.
+MAX_TEXT_LENGTH = 10_000
+MIN_TEXT_LENGTH = 2
 
 # ⚠️ One thing that catches people out in Milestone 5. A weighted average can
 # only land between its two inputs — so while `style_signal` is still the stub
@@ -92,7 +95,7 @@ AI_THRESHOLD = 0.65
 # an hour, and a script sending a thousand variations to map your thresholds.
 # Your README has to say why your numbers and not others.
 
-RATE_LIMITING_ENABLED = True
+RATE_LIMITING_ENABLED = os.getenv("AI201_RATE_LIMITS", "1") == "1"
 
 RATE_LIMIT_PER_MINUTE = 5
 RATE_LIMIT_PER_DAY = 50

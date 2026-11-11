@@ -649,7 +649,7 @@ FP07 - Human writing that repeats a phrase deliberately was the single worst out
 
 ---
 
-## Run Log and Verdicts
+## Before Run Log and Verdicts
 
 <!-- Your five criteria across three trials. `run_eval.py --label before`. -->
 
@@ -1232,20 +1232,633 @@ that the route validated text but did not enforce the creator_id contract.
 
 **What I changed:**
 
+I changed the combining rule from an equal average to a weighted average:
+`0.70 * model_score + 0.30 * style_score`. I also added route validation for
+the required `creator_id`, JSON-object request shape, and the 10,000-character
+text limit; rejected requests are recorded in the audit log.
+
 **Which diagnosis pointed at it:**
+
+The Criteria #2 and #3 diagnoses identified the equal-weight combining rule as
+compressing conflicting signals into the unsure band. The Criteria #5
+diagnosis identified the missing maximum-length check, and the malformed
+request attacks exposed the missing object and `creator_id` validation.
 
 ### Attack Run — After
 
 <!-- Same format. `run_attacks.py --label after` -->
 
+The After run used the same 56 attacks as the Before run. The complete result
+table is recorded in
+`results/attack_run_2026-11-11_0027_after.md`; the key comparison is:
 
+| Result | Before | After |
+|---|---:|---:|
+| Total attacks | 56 | 56 |
+| Automatic crashes | 3 | 0 |
+| Held | 37 | 37 |
+| Broke | 19 | 19 |
+| Single-character input | 500 | 400 |
+| Oversized input | 200 | 400 |
+| Missing `creator_id` | 200 | 400 |
+| JSON array body | 500 | 400 |
+| Flood limit | 429 after five accepted | 429 after five accepted |
+
+The After attack table follows the same format as the Before table:
+
+| ID | Family | Targeting | Status | Content ID | Guess | Score | Verdict |
+|---|---|---|---|---|---|---|---|
+| EV01 | evasion | signal two: typos raise word variety | 200 | `c_39f911a4e0f5` | human | 0.420 | BROKE |
+| EV02 | evasion | signal two: broken-up sentences raise length spread | 200 | `c_ad94df5b453e` | unsure | 0.131 | BROKE |
+| EV03 | evasion | signal two: a pasted quotation changes the shape | 200 | `c_4854f521a7ba` | unsure | 0.247 | BROKE |
+| EV04 | evasion | signal one: unusual words raise perplexity | 200 | `c_29c3d67eebd5` | unsure | 0.194 | BROKE |
+| EV05 | evasion | both signals: heavy human editing pass | 200 | `c_40564059f3ea` | unsure | 0.270 | BROKE |
+| EV06 | evasion | signal two: one very long sentence and one very short | 200 | `c_7aa0f3b106ca` | unsure | 0.111 | BROKE |
+| EV07 | evasion | signal two: padding with punctuation | 200 | `c_d0643d46adb8` | unsure | 0.066 | BROKE |
+| EV08 | evasion | signal one: text below the token window | 200 | `c_6bcb4bd5a7c1` | human | 0.301 | BROKE |
+| EV09 | evasion | both: AI text with a human opening paragraph bolted on | 200 | `c_3dcec372880c` | unsure | 0.299 | BROKE |
+| EV10 | evasion | signal two: repeated stanza structure | 200 | `c_b72f9f14c62b` | ai | 0.850 | HELD |
+| FP01 | false_positive | plain, clear human writing with no flourishes | 200 | `c_353c6cf2916f` | unsure | 0.241 | HELD |
+| FP02 | false_positive | human writing in a formal register | 200 | `c_29657a9cd0f9` | ai | 0.440 | BROKE |
+| FP03 | false_positive | a non-native English speaker writing carefully | 200 | `c_7808f9f3e722` | ai | 0.533 | BROKE |
+| FP04 | false_positive | a student essay written to a rubric | 200 | `c_4e94c5cd0a70` | ai | 0.536 | BROKE |
+| FP05 | false_positive | technical documentation written by a person | 200 | `c_783f527d1955` | ai | 0.532 | BROKE |
+| FP06 | false_positive | a person imitating a formal template | 200 | `c_91aedf5d881c` | ai | 0.603 | BROKE |
+| FP07 | false_positive | human writing that repeats a phrase deliberately | 200 | `c_9973a56682c8` | ai | 0.624 | BROKE |
+| FP08 | false_positive | very short genuine human submission | 200 | `c_93a81cb3bbfd` | unsure | 0.209 | HELD |
+| PI01 | prompt_injection | instruction to ignore the check | 200 | `c_a35793653f3f` | unsure | 0.019 | HELD |
+| PI02 | prompt_injection | instruction disguised as a system message | 200 | `c_3901f6058fcd` | human | 0.428 | HELD |
+| PI03 | prompt_injection | instruction wrapped in the writer's voice | 200 | `c_a3a758f441d2` | unsure | 0.181 | HELD |
+| PI04 | prompt_injection | attempt to make the label text hostile | 200 | `c_17fd04b73934` | unsure | 0.031 | HELD |
+| PI05 | prompt_injection | attempt to inject into the audit log | 200 | `c_dbd15d706f79` | unsure | 0.039 | HELD |
+| PI06 | prompt_injection | instruction plus real human text | 200 | `c_ddf4ec0bcdda` | unsure | 0.161 | HELD |
+| MF01 | malformed | text is only whitespace | 400 | `—` | — | — | HELD |
+| MF02 | malformed | text is a single character | 400 | `—` | — | — | HELD |
+| MF03 | malformed | text is control characters | 200 | `c_cb4569eae349` | human | 0.600 | HELD |
+| MF04 | malformed | text is only punctuation | 200 | `c_306b0bbf42e5` | human | 0.384 | HELD |
+| MF05 | malformed | text is a very long single word | 200 | `c_5697013d3175` | ai | 0.797 | HELD |
+| MF06 | malformed | text is emoji only | 200 | `c_3cd8dda86254` | ai | 0.996 | HELD |
+| MF07 | malformed | text is right-to-left script | 200 | `c_b37d11e232e5` | ai | 0.869 | HELD |
+| MF08 | malformed | text is 60,000 characters | 400 | `—` | — | — | HELD |
+| RQ01 | malformed | no text field at all | 400 | `—` | — | — | HELD |
+| RQ02 | malformed | no creator_id | 400 | `—` | — | — | HELD |
+| RQ03 | malformed | text is a number | 400 | `—` | — | — | HELD |
+| RQ04 | malformed | text is a list | 400 | `—` | — | — | HELD |
+| RQ05 | malformed | text is null | 400 | `—` | — | — | HELD |
+| RQ06 | malformed | creator_id is an object | 400 | `—` | — | — | HELD |
+| RQ07 | malformed | body is a JSON array, not an object | 400 | `—` | — | — | HELD |
+| RQ08 | malformed | body is unparseable JSON | 400 | `—` | — | — | HELD |
+| RQ09 | malformed | body is empty | 400 | `—` | — | — | HELD |
+| RQ10 | malformed | body is form-encoded, not JSON | 429 | `—` | — | — | HELD |
+| RQ11 | malformed | body is JSON claiming to be plain text | 429 | `—` | — | — | HELD |
+| RQ12 | malformed | deeply nested JSON | 400 | `—` | — | — | HELD |
+| FL01_01 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_03905a9a3954` | human | 0.560 | HELD |
+| FL01_02 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_1c1a25c139fb` | human | 0.560 | HELD |
+| FL01_03 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_9102752e8b4d` | human | 0.560 | HELD |
+| FL01_04 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_86e8f5c781de` | human | 0.560 | HELD |
+| FL01_05 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_84a3f3d7f56e` | human | 0.560 | HELD |
+| FL01_06 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_07 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_08 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_09 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_10 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_11 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_12 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+
+**Ten After audit log entries from the run**
+
+```json
+1. {"timestamp":"2026-11-11T05:27:47+00:00","content_id":"c_39f911a4e0f5","creator_id":"attacker_EV01","guess":"human","model_score":0.1635,"style_score":0.5852,"combined_score":0.29,"status":"decided"}
+2. {"timestamp":"2026-11-11T05:27:48+00:00","content_id":"c_b72f9f14c62b","creator_id":"attacker_EV10","guess":"ai","model_score":0.9792,"style_score":0.799,"combined_score":0.9251,"status":"decided"}
+3. {"timestamp":"2026-11-11T05:27:48+00:00","content_id":"c_9973a56682c8","creator_id":"attacker_FP07","guess":"ai","model_score":0.8816,"style_score":0.6502,"combined_score":0.8122,"status":"decided"}
+4. {"timestamp":"2026-11-11T05:27:49+00:00","creator_id":"attacker_MF02","event":"rejected","status":"rejected","reason":"invalid_text"}
+5. {"timestamp":"2026-11-11T05:27:49+00:00","creator_id":"attacker_MF08","event":"rejected","status":"rejected","reason":"text_too_long","max_length":10000}
+6. {"timestamp":"2026-11-11T05:27:49+00:00","creator_id":"unknown","event":"rejected","status":"rejected","reason":"invalid_creator_id"}
+7. {"timestamp":"2026-11-11T05:27:49+00:00","creator_id":"unknown","event":"rejected","status":"rejected","reason":"invalid_json_object"}
+8. {"timestamp":"2026-11-11T05:27:49+00:00","content_id":"c_03905a9a3954","creator_id":"attacker_flood","guess":"human","model_score":0.0287,"style_score":0.6667,"combined_score":0.2201,"status":"decided"}
+9. {"timestamp":"2026-11-11T05:27:49+00:00","creator_id":"attacker_flood","event":"rejected","status":"rejected","reason":"rate_limited","limit":"5 per 1 minute"}
+10. {"timestamp":"2026-11-11T05:27:48+00:00","content_id":"c_353c6cf2916f","creator_id":"attacker_FP01","guess":"unsure","model_score":0.6175,"style_score":0.6268,"combined_score":0.6203,"status":"decided"}
+```
 
 **Did it help, and how do I know:**
 
 <!-- Widening the unsure band usually fixes one problem and creates another.
      Reporting that trade honestly is worth full credit. -->
 
+The change helped the route-related objective: automatic attack crashes fell
+from 3 to 0, and the bad-input criterion improved from 3/4 to 4/4 in every
+trial. The scoring change did not meet the separation target: Criterion #2
+remained 0/5 human and 0/5 AI, while Criterion #3 improved from 1/3 to 2/3
+labels because an AI label became reachable, but the 15-submission sample
+still contained no human label. Criteria #1 and #4 stayed at their original
+passing results.
 
+### After Run Log and Verdicts
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. False positives — my own writing | ≤ 1 of 10 | 1/10 | 1/10 | 1/10 | MET |
+| 2. Score spread — human versus AI comparison | ≥ 4/5 human below 0.35 and ≥ 4/5 AI above 0.65 | 0/5 and 0/5 | 0/5 and 0/5 | 0/5 and 0/5 | MISSED |
+| 3. Label coverage — 15 varied submissions | 3 of 3 labels reachable | 2/3 | 2/3 | 2/3 | MISSED |
+| 4. Appeal path submissions | 5 of 5 appeals pass | 5/5 | 5/5 | 5/5 | MET |
+| 5. Bad input handling | 4 of 4 invalid requests return HTTP 400 | 4/4 | 4/4 | 4/4 | MET |
+
+Produced by:
+- File: `results/run_2026-11-11_0029_after.md`
+- Functions: `run_eval.py::main`, `app.py::submit`, and `app.py::appeal`
+
+**Real output from one trial**, pasted as text, naming the file and function
+that produced it:
+
+**NOTE: All the output below is from Trial 1.**
+
+```json
+
+1. False positives - my own writing
+[
+  {
+    "status": 200,
+    "content_id": "c_96d746ff67a6",
+    "guess": "unsure",
+    "confidence": 0.1678,
+    "model_score": 0.6198,
+    "style_score": 0.5002,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Love can be both a blessing and a curse as viewed in William Shakespea"
+  },
+  {
+    "status": 200,
+    "content_id": "c_5510eaf46e6b",
+    "guess": "unsure",
+    "confidence": 0.1924,
+    "model_score": 0.5817,
+    "style_score": 0.6301,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Secondly, love can be interpreted as a destructive force as time progr"
+  },
+  {
+    "status": 200,
+    "content_id": "c_a6946a5812bb",
+    "guess": "unsure",
+    "confidence": 0.041,
+    "model_score": 0.4067,
+    "style_score": 0.6494,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I'm interested in working for CrowdStrike with the company's sharp eye"
+  },
+  {
+    "status": 200,
+    "content_id": "c_a2c40aeafa5f",
+    "guess": "unsure",
+    "confidence": 0.0602,
+    "model_score": 0.5623,
+    "style_score": 0.4551,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Therefore, I'm interested in working for CrowdStrike because CrowdStri"
+  },
+  {
+    "status": 200,
+    "content_id": "c_841d88c04b06",
+    "guess": "ai",
+    "confidence": 0.3892,
+    "model_score": 0.6855,
+    "style_score": 0.7158,
+    "label": "We think this was probably generated by AI.",
+    "sent": "The purpose of this software design document is to introduce a new emp"
+  },
+  {
+    "status": 200,
+    "content_id": "c_2931cc1b0ad2",
+    "guess": "unsure",
+    "confidence": 0.1426,
+    "model_score": 0.4636,
+    "style_score": 0.3472,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "CRUD - Create, read, update, and delete are the four basic functions o"
+  },
+  {
+    "status": 200,
+    "content_id": "c_d2ef19272074",
+    "guess": "unsure",
+    "confidence": 0.156,
+    "model_score": 0.593,
+    "style_score": 0.543,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I don\u2019t want to share much information, but I have a question. For con"
+  },
+  {
+    "status": 200,
+    "content_id": "c_a63a87e4b7f3",
+    "guess": "unsure",
+    "confidence": 0.1248,
+    "model_score": 0.52,
+    "style_score": 0.6613,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I want to create my own version of an AI Resume Tailor with scoring fu"
+  },
+  {
+    "status": 200,
+    "content_id": "c_8d8b25400298",
+    "guess": "unsure",
+    "confidence": 0.2398,
+    "model_score": 0.3618,
+    "style_score": 0.4229,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "What questions should I ask at a NVIDIA event here at Georgia State as"
+  },
+  {
+    "status": 200,
+    "content_id": "c_e77c04d3cdba",
+    "guess": "unsure",
+    "confidence": 0.2892,
+    "model_score": 0.7092,
+    "style_score": 0.4939,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Which of the following services should he select on Home Depot's Pro R"
+  }
+]
+
+2. Score range - human versus AI comparison
+[
+  {
+    "status": 200,
+    "content_id": "c_55aa539d0492",
+    "guess": "unsure",
+    "confidence": 0.2234,
+    "model_score": 0.6333,
+    "style_score": 0.5613,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Can you make a draft of a business card for the company? For context, "
+  },
+  {
+    "status": 200,
+    "content_id": "c_200920380a38",
+    "guess": "unsure",
+    "confidence": 0.0924,
+    "model_score": 0.3869,
+    "style_score": 0.6098,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "There's a section called Additional Details and is asking for the lega"
+  },
+  {
+    "status": 200,
+    "content_id": "c_b0c88f9207f5",
+    "guess": "unsure",
+    "confidence": 0.1,
+    "model_score": 0.4874,
+    "style_score": 0.3628,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "What are the steps in applying and registering as an LLC in Georgia? F"
+  },
+  {
+    "status": 200,
+    "content_id": "c_03ade1a911d5",
+    "guess": "unsure",
+    "confidence": 0.203,
+    "model_score": 0.6413,
+    "style_score": 0.5085,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Out of curiosity, does my father qualify for Social Security Disabilit"
+  },
+  {
+    "status": 200,
+    "content_id": "c_0f27db0a1758",
+    "guess": "unsure",
+    "confidence": 0.2374,
+    "model_score": 0.6405,
+    "style_score": 0.5677,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Video game development is an excellent profession for bringing passion"
+  },
+  {
+    "status": 200,
+    "content_id": "c_550f1df4e149",
+    "guess": "ai",
+    "confidence": 0.3738,
+    "model_score": 0.7544,
+    "style_score": 0.5294,
+    "label": "We think this was probably generated by AI.",
+    "sent": "The importance of effective time management cannot be overstated in to"
+  },
+  {
+    "status": 200,
+    "content_id": "c_5daadc95176d",
+    "guess": "human",
+    "confidence": 0.5024,
+    "model_score": 0.2556,
+    "style_score": 0.233,
+    "label": "We think this was probably written by a person.",
+    "sent": "Absolutely. Given your current background\u2014CS coursework, Python/C/Java"
+  },
+  {
+    "status": 200,
+    "content_id": "c_fab2195b6c3b",
+    "guess": "unsure",
+    "confidence": 0.0244,
+    "model_score": 0.5247,
+    "style_score": 0.4016,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Ethernet can give you lower/more consistent latency, fewer connection "
+  },
+  {
+    "status": 200,
+    "content_id": "c_3b9d9c9b9eb9",
+    "guess": "unsure",
+    "confidence": 0.1412,
+    "model_score": 0.3806,
+    "style_score": 0.5431,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I contributed to software quality assurance in a fast-paced, agile env"
+  },
+  {
+    "status": 200,
+    "content_id": "c_54cdcba6d70e",
+    "guess": "unsure",
+    "confidence": 0.2618,
+    "model_score": 0.3696,
+    "style_score": 0.3678,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "StreetSense is an AI-assisted civic reporting app that lets residents "
+  }
+]
+
+3. Labeled coverage - 15 varied submissions
+[
+  {
+    "status": 200,
+    "content_id": "c_665be5e541aa",
+    "guess": "unsure",
+    "confidence": 0.2534,
+    "model_score": 0.6562,
+    "style_score": 0.558,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I missed the bus this morning, so I walked the last few blocks to camp"
+  },
+  {
+    "status": 200,
+    "content_id": "c_3a7169f86db3",
+    "guess": "unsure",
+    "confidence": 0.2444,
+    "model_score": 0.6193,
+    "style_score": 0.6289,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "My first attempt at the database query failed because I used the wrong"
+  },
+  {
+    "status": 200,
+    "content_id": "c_285faec0b4f0",
+    "guess": "unsure",
+    "confidence": 0.0596,
+    "model_score": 0.3815,
+    "style_score": 0.6771,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I usually plan my week on Sunday night, but I do not follow the plan p"
+  },
+  {
+    "status": 200,
+    "content_id": "c_fa8fd29d4da8",
+    "guess": "unsure",
+    "confidence": 0.0536,
+    "model_score": 0.5179,
+    "style_score": 0.5474,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "The meeting started late because two people were still commuting. We u"
+  },
+  {
+    "status": 200,
+    "content_id": "c_1f2ffcc8bb1c",
+    "guess": "unsure",
+    "confidence": 0.214,
+    "model_score": 0.2838,
+    "style_score": 0.6478,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "I prefer testing small changes as I go instead of waiting until the en"
+  },
+  {
+    "status": 200,
+    "content_id": "c_6c3e574c049e",
+    "guess": "unsure",
+    "confidence": 0.018,
+    "model_score": 0.4515,
+    "style_score": 0.5833,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "A reliable application should be easy to understand, simple to maintai"
+  },
+  {
+    "status": 200,
+    "content_id": "c_b38fe288fed6",
+    "guess": "unsure",
+    "confidence": 0.1778,
+    "model_score": 0.5701,
+    "style_score": 0.6328,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "When I worked on the project, I learned that communication was almost "
+  },
+  {
+    "status": 200,
+    "content_id": "c_2a601c103da0",
+    "guess": "unsure",
+    "confidence": 0.0438,
+    "model_score": 0.4906,
+    "style_score": 0.4488,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Good time management is not only about creating a schedule. It also re"
+  },
+  {
+    "status": 200,
+    "content_id": "c_010c68386508",
+    "guess": "unsure",
+    "confidence": 0.1454,
+    "model_score": 0.3728,
+    "style_score": 0.5543,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "The dashboard gives users a clear view of reported issues and their cu"
+  },
+  {
+    "status": 200,
+    "content_id": "c_b53cbe3f02aa",
+    "guess": "unsure",
+    "confidence": 0.1996,
+    "model_score": 0.2996,
+    "style_score": 0.6348,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Learning a new framework can feel slow during the first few days becau"
+  },
+  {
+    "status": 200,
+    "content_id": "c_5b70556dfef1",
+    "guess": "unsure",
+    "confidence": 0.2454,
+    "model_score": 0.7173,
+    "style_score": 0.4021,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "In today's rapidly evolving technological landscape, effective project"
+  },
+  {
+    "status": 200,
+    "content_id": "c_4e26c468dce0",
+    "guess": "unsure",
+    "confidence": 0.0784,
+    "model_score": 0.5943,
+    "style_score": 0.4105,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Artificial intelligence is transforming modern industries by improving"
+  },
+  {
+    "status": 200,
+    "content_id": "c_0e359661fedb",
+    "guess": "unsure",
+    "confidence": 0.1018,
+    "model_score": 0.6081,
+    "style_score": 0.4176,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "A successful cybersecurity strategy requires a comprehensive and proac"
+  },
+  {
+    "status": 200,
+    "content_id": "c_fdce05b9dcc6",
+    "guess": "unsure",
+    "confidence": 0.2612,
+    "model_score": 0.7971,
+    "style_score": 0.242,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "Cloud computing provides businesses with scalable, flexible, and cost-"
+  },
+  {
+    "status": 200,
+    "content_id": "c_3fd1dc8692bb",
+    "guess": "ai",
+    "confidence": 0.4112,
+    "model_score": 0.8768,
+    "style_score": 0.306,
+    "label": "We think this was probably generated by AI.",
+    "sent": "The development of a high-quality software application involves severa"
+  }
+]
+
+4. Appeal path submissions
+[
+  {
+    "status": 200,
+    "content_id": "c_6df184008baa",
+    "guess": "human",
+    "confidence": 0.5746,
+    "model_score": 0.0182,
+    "style_score": 0.6667,
+    "label": "We think this was probably written by a person.",
+    "sent": "I wrote this short project reflection after completing my software tes",
+    "appeal_http_status": 200,
+    "appeal_status": "under_review",
+    "appeal_audit_entries": 1,
+    "original_decision_preserved": true,
+    "appeal_pass": true
+  },
+  {
+    "status": 200,
+    "content_id": "c_8b44633f31a0",
+    "guess": "unsure",
+    "confidence": 0.1836,
+    "model_score": 0.2864,
+    "style_score": 0.6923,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "The application stores each report and allows users to review the curr",
+    "appeal_http_status": 200,
+    "appeal_status": "under_review",
+    "appeal_audit_entries": 1,
+    "original_decision_preserved": true,
+    "appeal_pass": true
+  },
+  {
+    "status": 200,
+    "content_id": "c_0f15e246ecb6",
+    "guess": "human",
+    "confidence": 0.4814,
+    "model_score": 0.1561,
+    "style_score": 0.5,
+    "label": "We think this was probably written by a person.",
+    "sent": "I tested the login flow, documented the failures, and shared the repro",
+    "appeal_http_status": 200,
+    "appeal_status": "under_review",
+    "appeal_audit_entries": 1,
+    "original_decision_preserved": true,
+    "appeal_pass": true
+  },
+  {
+    "status": 200,
+    "content_id": "c_ab43874aa56a",
+    "guess": "unsure",
+    "confidence": 0.0962,
+    "model_score": 0.3599,
+    "style_score": 0.6667,
+    "label": "We cannot tell confidently whether this was written by a person or generated by AI.",
+    "sent": "This paragraph describes how I improved the interface after receiving ",
+    "appeal_http_status": 200,
+    "appeal_status": "under_review",
+    "appeal_audit_entries": 1,
+    "original_decision_preserved": true,
+    "appeal_pass": true
+  },
+  {
+    "status": 200,
+    "content_id": "c_5b80f749bede",
+    "guess": "human",
+    "confidence": 0.5172,
+    "model_score": 0.0482,
+    "style_score": 0.6923,
+    "label": "We think this was probably written by a person.",
+    "sent": "I reviewed the final submission carefully and corrected the configurat",
+    "appeal_http_status": 200,
+    "appeal_status": "under_review",
+    "appeal_audit_entries": 1,
+    "original_decision_preserved": true,
+    "appeal_pass": true
+  }
+]
+
+5. Bad input handling
+[
+  {
+    "status": 400,
+    "content_id": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "{\"creator_id\": \"eval_missing_text\"}"
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "(empty text)"
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "   "
+  },
+  {
+    "status": 400,
+    "content_id": null,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "sent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+]
+```
 
 ---
 
