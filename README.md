@@ -1867,6 +1867,46 @@ that produced it:
 <!-- For each attack still getting through and each criterion still missed:
      what you'd do, and why you stopped. -->
 
+The following attacks still occur:
+
+- **EV01 (typos), EV02 (broken-up sentences), EV03 (pasted quotation), EV06
+  (extreme sentence lengths), and EV07 (punctuation padding):** I would add
+  features that discount edit noise and quotations before calculating the
+  surface-shape signal, then calibrate those features against held-out human
+  and AI samples. I stopped after the one permitted controlled weight change;
+  changing the signal features and the weights together would not isolate the
+  experiment's effect.
+- **EV04 (unusual words):** I would make the model signal less sensitive to
+  isolated rare words by evaluating the text in multiple windows and combining
+  the window scores. I stopped for the same reason: the experiment allowed one
+  controlled weight change, not a simultaneous detector redesign.
+- **EV05 (heavy human editing):** I would compare the model and style signals
+  across chunks and flag a large disagreement for review instead of allowing
+  the combined score to settle in a human or unsure band. I stopped after the
+  required single change so that I would not claim evidence from an unmeasured
+  second intervention.
+- **EV08 (text below the token window):** I would reject or separately label
+  submissions too short for a reliable model-signal decision, or use a
+  shorter-text calibration set. I stopped because adding a length policy would
+  change the input-validation behavior beyond the controlled scoring change.
+- **EV09 (AI text with a human opening):** I would score multiple sections and
+  require agreement across them, rather than letting a human-looking opening
+  offset the rest of the text. I stopped after the one controlled weight
+  change, so sectioning and recalibration were outside this run.
+- **FP02 (formal human writing), FP03 (careful non-native writing), FP04
+  (rubric-written essay), FP05 (technical documentation), FP06 (formal
+  template imitation), and FP07 (deliberate phrase repetition):** I would
+  expand the human calibration set with these writing styles and lower the
+  style signal's influence when it is the only strong AI-like evidence. I
+  stopped after the controlled weight change rather than tuning thresholds
+  and calibration data at the same time.
+
+Criterion #2 remains unmet: it scored 0/5 for human samples and 0/5 for AI
+samples. Criterion #3 improved to 2/3 because the AI label became reachable,
+but its 15-submission sample still contained no human label, so the sample
+portion remains unmet. Criteria #1 and #4 passed, and the bad-input result
+improved to 4/4; I did not make further changes because the experiment design
+required stopping after one controlled weight change.
 
 
 **The trade I'd make if this ran for real:**
@@ -1874,6 +1914,10 @@ that produced it:
 <!-- Two sentences. Fewer wrong accusations means more AI text getting through.
      Say which way you'd go and WHO PAYS FOR IT. -->
 
+In production, I would prefer a wider unsure outcome over a high-confidence
+accusation when the signals disagree, even though that lets some AI text pass.
+The system and reviewers pay through additional manual review, while writers
+pay less for false accusations.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
