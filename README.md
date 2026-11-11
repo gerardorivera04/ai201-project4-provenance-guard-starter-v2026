@@ -513,8 +513,8 @@ audit log when you go looking for the ten entries to paste.
 | FL01_12 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
 
 Total attacks: 56
-Held: 35
-Broke: 21
+Held: 37
+Broke: 19
 
 **Ten audit log entries from the run**
 
@@ -660,6 +660,11 @@ FP07 - Human writing that repeats a phrase deliberately was the single worst out
 | 3. Label coverage — 15 varied submissions | 3 of 3 labels reachable | 1/3 | 1/3 | 1/3 | MISSED |
 | 4. Appeal path submissions | 5 of 5 appeals pass | 5/5 | 5/5 | 5/5 | MET |
 | 5. Bad input handling | 4 of 4 invalid requests return HTTP 400 | 3/4 | 3/4 | 3/4 | MISSED |
+
+Criteria 1 was marked MET because each of the three trials produced exactly
+1 false positive out of 10, which meets the target of no more than 1.
+Criteria 4 was marked MET because all five appeal submissions passed in each
+trial, including the required status change and preserved original decision.
 
 **Real output from one trial**, pasted as text, naming the file and function
 that produced it:
@@ -1174,7 +1179,52 @@ Produced by:
 
      Look for a pattern. Five failures on one signal is one problem, not five. -->
 
+1. Diagnosis for Criteria #2 - Criterion 2 missed in all three trials because the signal scores for the human and AI samples overlapped heavily. The main stage was the combining rule, with both signal stages contributing to the problem. The model signal did not consistently give human text low scores or AI text high scores, and the style signal also produced overlapping values for both groups. The combining rule average the two scores equally, so disagreements and middle-range scores were pulled toward the unsure band instead of separating the groups. As a result, 0 of 5 human samples were below 0.35 and 0 of 5 AI samples were above 0.65. Additionally, the mechanism was insufficient signal separation followed by averaging.
 
+2. Diagnosis for Criteria #3 - Criterion 3 missed because the 15-submission sample produced only the unsure label. The primary stage was the combining rule, followed by label mapping. The model and style signals usually disagreed or produced middle-range values, and the equal-weight average placed every sample between 0.35 and 0.65. The label mapping did correctly covert those scores into unsure, so the mapping itself wasn't broken. Furthermore, the upstream scores never reached the human or the AI ranges. Finally, the mechanism was that the overlapping signal scores compress the combined scores into the unsure band, which made the human and the AI labels unreachable for that sample.
+
+3. Diagnosis for Criteria #5 - Criterion 5 missed due to the oversized text request returing HTTP 200 instead of HTTP 400. Moreover, the stage was the route. For instance, the route checks whether text is a non-empty string, but it doesn't check the required maximum length of 10,000 characters. Therefore, the 10,001-character request passed validation and was sent through signal one, signal two, the combining rule, and label mapping, which produced a normal decision instead of an error. The mechanism was a missing maximum-length validation rule in the route.
+
+Pattern found among the diagnoses: The detector's signals are not sufficiently separated. For example, signal one and signal two often produce middle-range or conflicting results. Then, the 0.50/0.50 combining rule compresses those results into the unsure band. Thus, this explains both Criterion 2's lack of separation and Criterion 3's missing human/AI labels. Furthermore, the false-positive attacks reveal the same root problem in reverse: predictable, formal, or repetitive human writing can make both signals appear AI-like.
+
+**Broken Attacks**
+
+1. The evasion failures followed one main pattern. EV01, EV02, EV03, EV06,
+and EV07 targeted signal two by adding typos, changing sentence breaks,
+adding quotations, varying sentence lengths, or padding punctuation. Signal
+two measures surface shape rather than authorship, so those edits made
+AI-generated text look more varied or less regular. The stage was signal two;
+the mechanism was that human-like surface changes lowered the style signal
+and dragged the combined score downward.
+
+2. EV04 and EV08 targeted signal one. Unusual wording increased perplexity, and
+short text reduced the amount of context available to the model. The stage
+was signal one; the mechanism was that the model signal interpreted unusual
+or insufficiently long text as less predictable and therefore more human-like.
+
+3. EV05 and EV09 targeted both signals. Human editing or adding a human-written
+opening changed both predictability and surface style. The stages were signal
+one and signal two, with the combining rule amplifying the effect by averaging
+the two lowered scores.
+
+4. The false-positive failures FP02 through FP07 followed the opposite pattern.
+The stage was primarily signal one and signal two, followed by the combining
+rule. Formal structure, careful wording, technical documentation, templates,
+and deliberate phrase repetition made genuine human writing predictable and
+stylistically regular. Both signals therefore produced AI-like values, and
+the equal-weight combining rule raised the final score enough to produce an
+AI label. The mechanism was that the detector measures writing characteristics
+that can also be produced by legitimate human writing; it cannot distinguish
+formal or repetitive human authorship from AI authorship.
+
+5. MF02 and RQ07 were route failures. MF02 caused a server error for a
+single-character input, and RQ07 caused a server error for a JSON array
+instead of returning a controlled client error. The route did not robustly
+validate every accepted JSON shape before the scoring pipeline was called.
+
+6. RQ02 and RQ06 were also route-validation failures. Missing or non-string
+creator_id values were accepted instead of being rejected. The mechanism was
+that the route validated text but did not enforce the creator_id contract.
 
 ---
 
